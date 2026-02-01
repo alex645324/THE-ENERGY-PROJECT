@@ -4,10 +4,26 @@ import 'package:provider/provider.dart';
 import '../models/contributor.dart';
 import '../view_models/home_view_model.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
   static const _tabLabels = ['CONTRIBUTORS', 'ADVISORS', 'PROGRESS'];
+  static const _collapsedRowCount = 10;
+
+  final Set<String> _expandedCategories = {};
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,22 +84,63 @@ class HomePage extends StatelessWidget {
               Expanded(
                 child: vm.loading
                     ? const Center(child: CircularProgressIndicator())
-                    : SingleChildScrollView(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 80, vertical: 40),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            for (final category
-                                in vm.contributorsByCategory.keys) ...[
-                              _buildCategorySection(
-                                category,
-                                vm.contributorsByCategory[category]!,
+                    : Column(
+                        children: [
+                          Expanded(
+                            child: PageView(
+                              controller: _pageController,
+                              physics: const NeverScrollableScrollPhysics(),
+                              onPageChanged: (index) {
+                                setState(() => _currentPage = index);
+                              },
+                              children: [
+                                for (final category
+                                    in vm.contributorsByCategory.keys)
+                                  SingleChildScrollView(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 80, vertical: 40),
+                                    child: _buildCategorySection(
+                                      category,
+                                      vm.contributorsByCategory[category]!,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (vm.contributorsByCategory.length > 1)
+                            Padding(
+                              padding:
+                                  const EdgeInsets.only(bottom: 16, top: 8),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(
+                                  vm.contributorsByCategory.length,
+                                  (i) => GestureDetector(
+                                    onTap: () {
+                                      _pageController.animateToPage(
+                                        i,
+                                        duration:
+                                            const Duration(milliseconds: 300),
+                                        curve: Curves.easeInOut,
+                                      );
+                                    },
+                                    child: Container(
+                                      width: 8,
+                                      height: 8,
+                                      margin: const EdgeInsets.symmetric(
+                                          horizontal: 4),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: i == _currentPage
+                                            ? Colors.black54
+                                            : Colors.grey.shade300,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
-                              const SizedBox(height: 40),
-                            ],
-                          ],
-                        ),
+                            ),
+                        ],
                       ),
               ),
           ],
@@ -94,6 +151,12 @@ class HomePage extends StatelessWidget {
 
   Widget _buildCategorySection(
       String category, List<Contributor> contributors) {
+    final isExpanded = _expandedCategories.contains(category);
+    final showToggle = contributors.length > _collapsedRowCount;
+    final visibleContributors = showToggle && !isExpanded
+        ? contributors.sublist(0, _collapsedRowCount)
+        : contributors;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -136,7 +199,7 @@ class HomePage extends StatelessWidget {
                       ))
                   .toList(),
             ),
-            ...contributors.map((c) => TableRow(
+            ...visibleContributors.map((c) => TableRow(
                   children: [
                     _cell(c.fullName),
                     _cell(c.title),
@@ -147,6 +210,28 @@ class HomePage extends StatelessWidget {
                 )),
           ],
         ),
+        if (showToggle) ...[
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                if (isExpanded) {
+                  _expandedCategories.remove(category);
+                } else {
+                  _expandedCategories.add(category);
+                }
+              });
+            },
+            child: Text(
+              isExpanded ? 'See less' : 'See more',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.black54,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
