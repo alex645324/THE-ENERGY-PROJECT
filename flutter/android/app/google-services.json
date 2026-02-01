@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "162583006610",
+    "project_id": "the-electrification-index",
+    "storage_bucket": "the-electrification-index.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:162583006610:android:5344c2e6bcbf20a4ac454b",
+        "android_client_info": {
+          "package_name": "com.example.code"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCmKlV1bZQLlGwBVbmSkTAJ9Zo06FF-v70"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
