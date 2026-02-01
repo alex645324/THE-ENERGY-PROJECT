@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../models/contributor.dart';
 import '../view_models/home_view_model.dart';
 
 class HomePage extends StatelessWidget {
@@ -63,59 +64,104 @@ class HomePage extends StatelessWidget {
                 }),
               ),
             ),
-            if (vm.selectedTab == 0) ...[
-              const SizedBox(height: 40),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 80),
-                child: Table(
-                  border: TableBorder.all(
-                    color: Colors.grey.shade300,
-                    width: 1,
-                  ),
-                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                  children: [
-                    TableRow(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+            if (vm.selectedTab == 0)
+              Expanded(
+                child: vm.loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 80, vertical: 40),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (final category
+                                in vm.contributorsByCategory.keys) ...[
+                              _buildCategorySection(
+                                category,
+                                vm.contributorsByCategory[category]!,
+                              ),
+                              const SizedBox(height: 40),
+                            ],
+                          ],
+                        ),
                       ),
-                      children: vm.contributorHeaders
-                          .map((h) => Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 10),
-                                child: Text(
-                                  h,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black87,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ))
-                          .toList(),
-                    ),
-                    ...vm.contributorRows.map((row) => TableRow(
-                          children: row
-                              .map((cell) => Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 16, vertical: 10),
-                                    child: Text(
-                                      cell,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w400,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ))
-                              .toList(),
-                        )),
-                  ],
-                ),
               ),
-            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCategorySection(
+      String category, List<Contributor> contributors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$category (${contributors.length})',
+          style: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Table(
+          border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+          columnWidths: const {
+            0: FlexColumnWidth(1.2),
+            1: FlexColumnWidth(1.5),
+            2: FlexColumnWidth(1.2),
+            3: FlexColumnWidth(1.5),
+            4: FlexColumnWidth(1.5),
+          },
+          children: [
+            TableRow(
+              decoration: BoxDecoration(color: Colors.grey.shade100),
+              children: HomeViewModel.contributorHeaders
+                  .map((h) => Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                        child: Text(
+                          h,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ))
+                  .toList(),
+            ),
+            ...contributors.map((c) => TableRow(
+                  children: [
+                    _cell(c.fullName),
+                    _cell(c.title),
+                    _cell(c.company),
+                    _cell(c.email),
+                    _cell(c.linkedinUrl),
+                  ],
+                )),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _cell(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Text(
+        text,
+        style: GoogleFonts.inter(
+          fontSize: 12,
+          fontWeight: FontWeight.w400,
+          color: Colors.black87,
+        ),
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
