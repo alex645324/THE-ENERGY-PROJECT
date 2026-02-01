@@ -20,12 +20,18 @@ class _HomePageState extends State<HomePage> {
     2: FlexColumnWidth(1.2),
     3: FlexColumnWidth(1.5),
     4: FlexColumnWidth(1.5),
-    5: FixedColumnWidth(40),
+    5: FlexColumnWidth(1.5),
+    6: FlexColumnWidth(1.2),
+    7: FixedColumnWidth(40),
   };
 
   final Set<String> _expandedCategories = {};
   final PageController _pageController = PageController();
   int _currentPage = 0;
+
+  final Map<String, bool> _initialLocked = {};
+  final Map<String, bool> _followUpLocked = {};
+  final Set<String> _templatesSynced = {};
 
   void _goToPage(int page) {
     _pageController.animateToPage(
@@ -41,6 +47,8 @@ class _HomePageState extends State<HomePage> {
   final _companyCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _linkedinCtrl = TextEditingController();
+  final Map<String, TextEditingController> _initialTemplateCtrls = {};
+  final Map<String, TextEditingController> _followUpTemplateCtrls = {};
 
   @override
   void dispose() {
@@ -50,6 +58,12 @@ class _HomePageState extends State<HomePage> {
     _companyCtrl.dispose();
     _emailCtrl.dispose();
     _linkedinCtrl.dispose();
+    for (final c in _initialTemplateCtrls.values) {
+      c.dispose();
+    }
+    for (final c in _followUpTemplateCtrls.values) {
+      c.dispose();
+    }
     _pageController.dispose();
     super.dispose();
   }
@@ -113,111 +127,105 @@ class _HomePageState extends State<HomePage> {
               Expanded(
                 child: vm.loading
                     ? const Center(child: CircularProgressIndicator())
-                    : Column(
+                    : PageView(
+                        controller: _pageController,
+                        physics: const NeverScrollableScrollPhysics(),
+                        onPageChanged: (index) {
+                          setState(() => _currentPage = index);
+                        },
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 80, vertical: 16),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    onChanged: (query) {
-                                      vm.setSearchQuery(query);
-                                      if (query.isNotEmpty) {
-                                        final categories = vm
-                                            .contributorsByCategory.keys
-                                            .toList();
-                                        for (var i = 0;
-                                            i < categories.length;
-                                            i++) {
-                                          final hasMatch = vm
-                                              .contributorsByCategory[
-                                                  categories[i]]!
-                                              .any((c) => vm.isMatch(c));
-                                          if (hasMatch) {
-                                            _goToPage(i);
-                                            break;
-                                          }
-                                        }
-                                      }
-                                    },
-                                    decoration: InputDecoration(
-                                      hintText: 'Search by name...',
-                                      hintStyle: GoogleFonts.inter(
-                                        fontSize: 13,
-                                        color: Colors.grey.shade400,
-                                      ),
-                                      prefixIcon: const Icon(Icons.search,
-                                          size: 20, color: Colors.grey),
-                                      isDense: true,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                              vertical: 10),
-                                      border: OutlineInputBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(8),
-                                        borderSide: BorderSide(
-                                            color: Colors.grey.shade300),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(8),
-                                        borderSide: BorderSide(
-                                            color: Colors.grey.shade300),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(8),
-                                        borderSide: BorderSide(
-                                            color: const Color(0xFFF2A900).withValues(alpha: 0.3),
-                                            width: 2),
-                                      ),
-                                    ),
-                                    style: GoogleFonts.inter(fontSize: 13),
+                          for (final category
+                              in vm.contributorsByCategory.keys)
+                            SingleChildScrollView(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 80, vertical: 16),
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  _buildSearchBar(vm),
+                                  const SizedBox(height: 24),
+                                  _buildCategorySection(
+                                    category,
+                                    vm.contributorsByCategory[category]!,
                                   ),
-                                ),
-                                if (vm.searchQuery.isNotEmpty) ...[
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    '${vm.contributorsByCategory.values.expand((list) => list).where((c) => vm.isMatch(c)).length} matches',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.black54,
-                                    ),
-                                  ),
+                                  const SizedBox(height: 24),
+                                  _buildEmailTemplates(vm, category),
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
-                          Expanded(
-                            child: PageView(
-                              controller: _pageController,
-                              physics: const NeverScrollableScrollPhysics(),
-                              onPageChanged: (index) {
-                                setState(() => _currentPage = index);
-                              },
-                              children: [
-                                for (final category
-                                    in vm.contributorsByCategory.keys)
-                                  SingleChildScrollView(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 80, vertical: 40),
-                                    child: _buildCategorySection(
-                                      category,
-                                      vm.contributorsByCategory[category]!,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
                         ],
                       ),
               ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSearchBar(HomeViewModel vm) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            onChanged: (query) {
+              vm.setSearchQuery(query);
+              if (query.isNotEmpty) {
+                final categories =
+                    vm.contributorsByCategory.keys.toList();
+                for (var i = 0; i < categories.length; i++) {
+                  final hasMatch = vm
+                      .contributorsByCategory[categories[i]]!
+                      .any((c) => vm.isMatch(c));
+                  if (hasMatch) {
+                    _goToPage(i);
+                    break;
+                  }
+                }
+              }
+            },
+            decoration: InputDecoration(
+              hintText: 'Search by name...',
+              hintStyle: GoogleFonts.inter(
+                fontSize: 13,
+                color: Colors.grey.shade400,
+              ),
+              prefixIcon:
+                  const Icon(Icons.search, size: 20, color: Colors.grey),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(vertical: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                    color: const Color(0xFFF2A900)
+                        .withValues(alpha: 0.3),
+                    width: 2),
+              ),
+            ),
+            style: GoogleFonts.inter(fontSize: 13),
+          ),
+        ),
+        if (vm.searchQuery.isNotEmpty) ...[
+          const SizedBox(width: 12),
+          Text(
+            '${vm.contributorsByCategory.values.expand((list) => list).where((c) => vm.isMatch(c)).length} matches',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: Colors.black54,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -307,6 +315,8 @@ class _HomePageState extends State<HomePage> {
                   _cell(c.company),
                   _cell(c.email),
                   _cell(c.linkedinUrl),
+                  _outboundEmailCell(c, vm),
+                  _statusCell(c, vm),
                   GestureDetector(
                     onTap: () async {
                       final confirmed = await showDialog<bool>(
@@ -406,6 +416,8 @@ class _HomePageState extends State<HomePage> {
                 _inputCell(_companyCtrl, 'Company'),
                 _inputCell(_emailCtrl, 'Email'),
                 _inputCell(_linkedinCtrl, 'LinkedIn URL'),
+                const SizedBox.shrink(),
+                const SizedBox.shrink(),
                 GestureDetector(
                   onTap: () => _handleAdd(
                       context.read<HomeViewModel>(), category),
@@ -442,6 +454,184 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildEmailTemplates(HomeViewModel vm, String category) {
+    // Lazily create controllers and sync from VM once per category
+    _initialTemplateCtrls.putIfAbsent(category, () => TextEditingController());
+    _followUpTemplateCtrls.putIfAbsent(category, () => TextEditingController());
+    if (!_templatesSynced.contains(category)) {
+      final initial = vm.initialTemplate(category);
+      final followUp = vm.followUpTemplate(category);
+      if (initial.isNotEmpty || followUp.isNotEmpty) {
+        _initialTemplateCtrls[category]!.text = initial;
+        _followUpTemplateCtrls[category]!.text = followUp;
+        _initialLocked[category] = initial.isNotEmpty;
+        _followUpLocked[category] = followUp.isNotEmpty;
+        _templatesSynced.add(category);
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        Text(
+          'EMAIL TEMPLATES — $category',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _buildTemplateCard(
+          vm: vm,
+          category: category,
+          title: 'Initial Email',
+          type: 'initial',
+          controller: _initialTemplateCtrls[category]!,
+          locked: _initialLocked[category] ?? false,
+          onToggleLock: () => setState(() =>
+              _initialLocked[category] = !(_initialLocked[category] ?? false)),
+        ),
+        const SizedBox(height: 8),
+        _buildTemplateCard(
+          vm: vm,
+          category: category,
+          title: 'Follow-Up Email',
+          type: 'followUp',
+          controller: _followUpTemplateCtrls[category]!,
+          locked: _followUpLocked[category] ?? false,
+          onToggleLock: () => setState(() =>
+              _followUpLocked[category] = !(_followUpLocked[category] ?? false)),
+        ),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  Widget _buildTemplateCard({
+    required HomeViewModel vm,
+    required String category,
+    required String title,
+    required String type,
+    required TextEditingController controller,
+    required bool locked,
+    required VoidCallback onToggleLock,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: locked ? onToggleLock : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: onToggleLock,
+                    child: Icon(
+                      locked ? Icons.lock_outline : Icons.lock_open,
+                      size: 16,
+                      color: Colors.grey.shade400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (!locked) ...[
+            Divider(height: 1, color: Colors.grey.shade300),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: TextField(
+                controller: controller,
+                maxLines: 6,
+                decoration: InputDecoration(
+                  hintText: 'Paste your template here...',
+                  hintStyle: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: Colors.grey.shade400,
+                  ),
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(
+                      color: const Color(0xFFF2A900).withValues(alpha: 0.3),
+                      width: 2,
+                    ),
+                  ),
+                ),
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 12, right: 12, bottom: 12),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: () {
+                    vm.saveTemplate(category, type, controller.text.trim());
+                    setState(() {
+                      if (type == 'initial') {
+                        _initialLocked[category] = true;
+                      } else {
+                        _followUpLocked[category] = true;
+                      }
+                    });
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'Save',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -495,6 +685,74 @@ class _HomePageState extends State<HomePage> {
     _companyCtrl.clear();
     _emailCtrl.clear();
     _linkedinCtrl.clear();
+  }
+
+  Widget _outboundEmailCell(Contributor c, HomeViewModel vm) {
+    if (c.outboundEmail.isNotEmpty) {
+      return _cell(c.outboundEmail);
+    }
+    final ctrl = TextEditingController();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: TextField(
+        controller: ctrl,
+        decoration: InputDecoration(
+          hintText: 'Set email...',
+          hintStyle: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade400),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(
+              color: const Color(0xFFF2A900).withValues(alpha: 0.3),
+              width: 2,
+            ),
+          ),
+        ),
+        style: GoogleFonts.inter(fontSize: 12, color: Colors.black87),
+        onSubmitted: (value) {
+          final trimmed = value.trim();
+          if (trimmed.isNotEmpty) {
+            vm.setOutboundEmail(c, trimmed);
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _statusCell(Contributor c, HomeViewModel vm) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: c.status.isEmpty ? null : c.status,
+          hint: Text(
+            'Set status',
+            style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade400),
+          ),
+          isDense: true,
+          isExpanded: true,
+          style: GoogleFonts.inter(fontSize: 12, color: Colors.black87),
+          items: HomeViewModel.statusOptions.map((s) => DropdownMenuItem(
+            value: s,
+            child: Text(s, style: GoogleFonts.inter(fontSize: 12)),
+          )).toList(),
+          onChanged: (value) {
+            if (value != null) {
+              vm.setStatus(c, value);
+            }
+          },
+        ),
+      ),
+    );
   }
 
   Widget _cell(String text) {

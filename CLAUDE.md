@@ -80,18 +80,20 @@ Contributor data is stored in Firestore using subcollections under a `contributo
 
 ```
 contributors/
-  ├── EPCs (document) → items/ (subcollection, ~docs)
-  ├── OEMs (document) → items/ (subcollection, ~docs)
-  └── Utilities (document) → items/ (subcollection, ~docs)
+  ├── EPCs (document) → { initialEmail, followUpEmail } + items/ (subcollection, ~docs)
+  ├── OEMs (document) → { initialEmail, followUpEmail } + items/ (subcollection, ~docs)
+  └── Utilities (document) → { initialEmail, followUpEmail } + items/ (subcollection, ~docs)
 ```
 
 Each contributor document has fields: `firstName`, `lastName`, `title`, `company`, `email`, `linkedinUrl`. The `Contributor` model also stores a `docId` (the Firestore document ID) used for deletion. ~2,350 total records across 3 categories.
 
-`HomeViewModel.loadContributors()` iterates over the 3 category subcollections and groups results.
+Each category document also stores `initialEmail` and `followUpEmail` fields for per-category email templates.
+
+`HomeViewModel.loadContributors()` iterates over the 3 category subcollections and groups results. `HomeViewModel.loadTemplates()` reads email templates from each category document.
 
 ### Current State
 
-The app displays a title ("THE ELECTRIFICATION INDEX OS") and a 3-tab bar (CONTRIBUTORS, ADVISORS, PROGRESS). Default selected tab is ADVISORS (index 1). The CONTRIBUTORS tab reads contributor data from Firestore and displays it in stacked tables grouped by category (EPCs, OEMs, Utilities), showing Name, Title, Company, Email, LinkedIn, and a narrow action column. The action column shows an `x` icon on data rows (deletes the contributor after a confirmation dialog) and a `+` icon on the input row (adds a new contributor). ADVISORS and PROGRESS tabs are not yet implemented.
+The app displays a title ("THE ELECTRIFICATION INDEX OS") and a 3-tab bar (CONTRIBUTORS, ADVISORS, PROGRESS). Default selected tab is ADVISORS (index 1). The CONTRIBUTORS tab reads contributor data from Firestore and displays it in stacked tables grouped by category (EPCs, OEMs, Utilities), showing Name, Title, Company, Email, LinkedIn, and a narrow action column. The action column shows an `x` icon on data rows (deletes the contributor after a confirmation dialog) and a `+` icon on the input row (adds a new contributor). Below each category table is an "EMAIL TEMPLATES" section with two collapsible cards (Initial Email and Follow-Up Email). Each card has a text area for pasting/editing, a Save button, and a lock/collapse toggle. Templates are stored per category and automatically switch when the user navigates between categories. ADVISORS and PROGRESS tabs are not yet implemented.
 
 ## Python Email Sender (flutter/automated-email-sender/)
 

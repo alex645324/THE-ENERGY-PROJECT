@@ -7,6 +7,8 @@ class Contributor {
   final String email;
   final String linkedinUrl;
   final String category;
+  final String outboundEmail;
+  final String status;
 
   const Contributor({
     this.docId = '',
@@ -17,6 +19,8 @@ class Contributor {
     required this.email,
     required this.linkedinUrl,
     required this.category,
+    this.outboundEmail = '',
+    this.status = '',
   });
 
   String get fullName => '$firstName $lastName';

@@ -7,6 +7,8 @@ class HomeViewModel extends ChangeNotifier {
   bool _loading = false;
   Map<String, List<Contributor>> _contributorsByCategory = {};
   String _searchQuery = '';
+  final Map<String, String> _initialTemplates = {};
+  final Map<String, String> _followUpTemplates = {};
 
   int get selectedTab => _selectedTab;
   bool get loading => _loading;
@@ -14,7 +16,12 @@ class HomeViewModel extends ChangeNotifier {
       _contributorsByCategory;
   String get searchQuery => _searchQuery;
 
-  static const contributorHeaders = ['NAME', 'TITLE', 'COMPANY', 'EMAIL', 'LINKEDIN'];
+  String initialTemplate(String category) => _initialTemplates[category] ?? '';
+  String followUpTemplate(String category) => _followUpTemplates[category] ?? '';
+
+  static const contributorHeaders = ['NAME', 'TITLE', 'COMPANY', 'EMAIL', 'LINKEDIN', 'OUTBOUND EMAIL', 'STATUS'];
+
+  static const statusOptions = ['Initial Email Sent', 'No Response', 'Follow-Up Sent', 'Responded'];
 
   final _firestore = FirebaseFirestore.instance;
 
@@ -23,8 +30,12 @@ class HomeViewModel extends ChangeNotifier {
   CollectionReference<Map<String, dynamic>> _items(String category) =>
       _firestore.collection('contributors').doc(category).collection('items');
 
+  DocumentReference<Map<String, dynamic>> _categoryDoc(String category) =>
+      _firestore.collection('contributors').doc(category);
+
   HomeViewModel() {
     loadContributors();
+    loadTemplates();
   }
 
   void setTab(int index) {
@@ -50,6 +61,8 @@ class HomeViewModel extends ChangeNotifier {
       'company': c.company,
       'email': c.email,
       'linkedinUrl': c.linkedinUrl,
+      'outboundEmail': c.outboundEmail,
+      'status': c.status,
     });
 
     final saved = Contributor(
@@ -61,6 +74,8 @@ class HomeViewModel extends ChangeNotifier {
       email: c.email,
       linkedinUrl: c.linkedinUrl,
       category: c.category,
+      outboundEmail: c.outboundEmail,
+      status: c.status,
     );
 
     _contributorsByCategory.putIfAbsent(c.category, () => []);
@@ -72,6 +87,35 @@ class HomeViewModel extends ChangeNotifier {
     await _items(c.category).doc(c.docId).delete();
 
     _contributorsByCategory[c.category]?.remove(c);
+    notifyListeners();
+  }
+
+  Future<void> setOutboundEmail(Contributor c, String email) async {
+    if (c.outboundEmail.isNotEmpty) return;
+    await _items(c.category).doc(c.docId).update({'outboundEmail': email});
+    _replaceContributor(c, Contributor(
+      docId: c.docId, firstName: c.firstName, lastName: c.lastName,
+      title: c.title, company: c.company, email: c.email,
+      linkedinUrl: c.linkedinUrl, category: c.category,
+      outboundEmail: email, status: c.status,
+    ));
+  }
+
+  Future<void> setStatus(Contributor c, String newStatus) async {
+    await _items(c.category).doc(c.docId).update({'status': newStatus});
+    _replaceContributor(c, Contributor(
+      docId: c.docId, firstName: c.firstName, lastName: c.lastName,
+      title: c.title, company: c.company, email: c.email,
+      linkedinUrl: c.linkedinUrl, category: c.category,
+      outboundEmail: c.outboundEmail, status: newStatus,
+    ));
+  }
+
+  void _replaceContributor(Contributor old, Contributor updated) {
+    final list = _contributorsByCategory[old.category];
+    if (list == null) return;
+    final i = list.indexOf(old);
+    if (i != -1) list[i] = updated;
     notifyListeners();
   }
 
@@ -95,6 +139,8 @@ class HomeViewModel extends ChangeNotifier {
           email: d['email'] as String? ?? '',
           linkedinUrl: d['linkedinUrl'] as String? ?? '',
           category: category,
+          outboundEmail: d['outboundEmail'] as String? ?? '',
+          status: d['status'] as String? ?? '',
         );
       }).toList();
 
@@ -108,4 +154,26 @@ class HomeViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> loadTemplates() async {
+    for (final category in _categories) {
+      final doc = await _categoryDoc(category).get();
+      if (doc.exists) {
+        final d = doc.data()!;
+        _initialTemplates[category] = d['initialEmail'] as String? ?? '';
+        _followUpTemplates[category] = d['followUpEmail'] as String? ?? '';
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> saveTemplate(String category, String type, String body) async {
+    final field = type == 'initial' ? 'initialEmail' : 'followUpEmail';
+    await _categoryDoc(category).set({field: body}, SetOptions(merge: true));
+    if (type == 'initial') {
+      _initialTemplates[category] = body;
+    } else {
+      _followUpTemplates[category] = body;
+    }
+    notifyListeners();
+  }
 }
