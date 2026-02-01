@@ -1,4 +1,5 @@
 class Contributor {
+  final String docId;
   final String firstName;
   final String lastName;
   final String title;
@@ -8,6 +9,7 @@ class Contributor {
   final String category;
 
   const Contributor({
+    this.docId = '',
     required this.firstName,
     required this.lastName,
     required this.title,
