@@ -1,10 +1,14 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../models/contributor.dart';
 
 class HomeViewModel extends ChangeNotifier {
   int _selectedTab = 1;
   bool _loading = false;
+  bool _sending = false;
+  String _sendResult = '';
   Map<String, List<Contributor>> _contributorsByCategory = {};
   String _searchQuery = '';
   final Map<String, String> _initialTemplates = {};
@@ -12,6 +16,8 @@ class HomeViewModel extends ChangeNotifier {
 
   int get selectedTab => _selectedTab;
   bool get loading => _loading;
+  bool get sending => _sending;
+  String get sendResult => _sendResult;
   Map<String, List<Contributor>> get contributorsByCategory =>
       _contributorsByCategory;
   String get searchQuery => _searchQuery;
@@ -68,21 +74,8 @@ class HomeViewModel extends ChangeNotifier {
       'status': c.status,
     });
 
-    final saved = Contributor(
-      docId: docRef.id,
-      firstName: c.firstName,
-      lastName: c.lastName,
-      title: c.title,
-      company: c.company,
-      email: c.email,
-      linkedinUrl: c.linkedinUrl,
-      category: c.category,
-      outboundEmail: c.outboundEmail,
-      status: c.status,
-    );
-
     _contributorsByCategory.putIfAbsent(c.category, () => []);
-    _contributorsByCategory[c.category]!.add(saved);
+    _contributorsByCategory[c.category]!.add(_copy(c, docId: docRef.id));
     notifyListeners();
   }
 
@@ -96,22 +89,22 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> setOutboundEmail(Contributor c, String email) async {
     if (c.outboundEmail.isNotEmpty) return;
     await _items(c.category).doc(c.docId).update({'outboundEmail': email});
-    _replaceContributor(c, Contributor(
-      docId: c.docId, firstName: c.firstName, lastName: c.lastName,
-      title: c.title, company: c.company, email: c.email,
-      linkedinUrl: c.linkedinUrl, category: c.category,
-      outboundEmail: email, status: c.status,
-    ));
+    _replaceContributor(c, _copy(c, outboundEmail: email));
   }
 
   Future<void> setStatus(Contributor c, String newStatus) async {
     await _items(c.category).doc(c.docId).update({'status': newStatus});
-    _replaceContributor(c, Contributor(
-      docId: c.docId, firstName: c.firstName, lastName: c.lastName,
+    _replaceContributor(c, _copy(c, status: newStatus));
+  }
+
+  Contributor _copy(Contributor c, {String? docId, String? outboundEmail, String? status}) {
+    return Contributor(
+      docId: docId ?? c.docId, firstName: c.firstName, lastName: c.lastName,
       title: c.title, company: c.company, email: c.email,
       linkedinUrl: c.linkedinUrl, category: c.category,
-      outboundEmail: c.outboundEmail, status: newStatus,
-    ));
+      outboundEmail: outboundEmail ?? c.outboundEmail,
+      status: status ?? c.status,
+    );
   }
 
   void _replaceContributor(Contributor old, Contributor updated) {
@@ -177,6 +170,42 @@ class HomeViewModel extends ChangeNotifier {
     } else {
       _followUpTemplates[category] = body;
     }
+    notifyListeners();
+  }
+
+  Future<void> sendEmails(String category, String type) async {
+    _sending = true;
+    _sendResult = '';
+    notifyListeners();
+
+    try {
+      final response = await http.post(
+        Uri.parse('http://localhost:5001/send-emails'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'category': category, 'type': type}),
+      );
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+      if (response.statusCode == 200) {
+        final status = data['status'] as String? ?? '';
+        if (status == 'completed') {
+          _sendResult = 'Sent ${data['sent']}/${data['total']} emails';
+        } else if (status == 'no_recipients') {
+          _sendResult = data['message'] as String? ?? 'No recipients found';
+        } else if (status == 'spam_block') {
+          _sendResult = 'Stopped: spam block detected after ${data['sent']} sent';
+        }
+      } else {
+        _sendResult = data['error'] as String? ?? 'Server error';
+      }
+
+      await loadContributors();
+    } catch (e) {
+      _sendResult = 'Connection error: is the email server running?';
+    }
+
+    _sending = false;
     notifyListeners();
   }
 }

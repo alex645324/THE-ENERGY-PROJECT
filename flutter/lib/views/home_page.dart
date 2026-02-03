@@ -508,6 +508,28 @@ class _HomePageState extends State<HomePage> {
           onToggleLock: () => setState(() =>
               _followUpLocked[category] = !(_followUpLocked[category] ?? false)),
         ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            _sendButton(vm, category, 'Send Initial Emails', 'initial'),
+            const SizedBox(width: 12),
+            _sendButton(vm, category, 'Send Follow-Up Emails', 'followUp'),
+            if (vm.sending) ...[
+              const SizedBox(width: 12),
+              const SizedBox(
+                width: 16, height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ],
+            if (vm.sendResult.isNotEmpty && !vm.sending) ...[
+              const SizedBox(width: 12),
+              Text(
+                vm.sendResult,
+                style: GoogleFonts.inter(fontSize: 12, color: Colors.black54),
+              ),
+            ],
+          ],
+        ),
         const SizedBox(height: 12),
       ],
     );
@@ -750,6 +772,29 @@ class _HomePageState extends State<HomePage> {
               vm.setStatus(c, value);
             }
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _sendButton(HomeViewModel vm, String category, String label, String type) {
+    return GestureDetector(
+      onTap: vm.sending ? null : () => vm.sendEmails(category, type),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: vm.sending
+                ? Colors.grey.shade400
+                : Colors.black.withValues(alpha: 0.7),
+          ),
         ),
       ),
     );
