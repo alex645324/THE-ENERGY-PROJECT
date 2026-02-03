@@ -27,11 +27,14 @@ class HomeViewModel extends ChangeNotifier {
 
   static const _categories = ['EPCs', 'OEMs', 'Utilities'];
 
+  // Switch to 'contributors' for production
+  static const _collectionName = 'contributors_test';
+
   CollectionReference<Map<String, dynamic>> _items(String category) =>
-      _firestore.collection('contributors').doc(category).collection('items');
+      _firestore.collection(_collectionName).doc(category).collection('items');
 
   DocumentReference<Map<String, dynamic>> _categoryDoc(String category) =>
-      _firestore.collection('contributors').doc(category);
+      _firestore.collection(_collectionName).doc(category);
 
   HomeViewModel() {
     loadContributors();
