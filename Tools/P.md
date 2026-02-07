@@ -1,3 +1,4 @@
+Here is your full **P.md** — clean, minimal, copy-paste ready:
 
 ---
 
@@ -35,10 +36,17 @@ For **every change step**, the developer must post:
 
 **“Step N — Plan to implement:”**
 
-* **Files to add/edit** → exact paths (e.g., `lib/services/feedback_service.dart`)
-* **Data structures / functions** → names + signatures (e.g., `Future<FeedbackModel> generateFeedback(...)`)
+**Explanation (max 2 short paragraphs)**
+
+* Paragraph 1 — technical explanation of what will change, what logic is added or reused, constraints, and how this follows the simplicity and minimal-scope rules.
+* Paragraph 2 — the same explanation using a simple real-world analogy to prove the solution is minimal and intuitive.
+
+**Implementation details**
+
+* **Files/components to add/edit** → names only (no exact paths)
+* **Data structures / functions** → names + signatures
 * **Inclusions / exclusions** → what will and will not be done
-* **Test cases** → list of validations to confirm implementation
+* **Test cases** → validations to confirm implementation
 
 ---
 
@@ -55,24 +63,30 @@ For **every change step**, the developer must post:
 * Every implementation must reduce or maintain simplicity.
 * Complexity should never be introduced.
 * **Simplify over complexity** — this is the default rule.
+* After every plan ask your self: is this the simplest approach to achieve our goals? if yes then continue if no then rewrite the plan with the simplest approach to achieve the goal. 
 
 ---
 
 ## 5. **Don’t Touch Rule**
 
 * Do not touch or change any functionality that is not related to the task at hand.
-* If you must change unrelated code, you must confirm first and wait for explicit approval.
+* If unrelated code must change, confirm first and wait for explicit approval.
 
 ---
 
 ## 6. **Methods Rule**
 
-* Do not create new methods or logic if existing logic can be reused or tweaked safely.
-* Remove methods or logic that are no longer in use (dead code). or adds complexity for no reason. the bare minimum is what we are looking for. 
+* Do not create new methods or logic if existing logic can be reused or safely tweaked.
+* Remove methods or logic that are no longer in use (dead code) or add unnecessary complexity.
+* The bare minimum is the goal.
 
-## 7. **simpler**
+---
 
-* After you come up with a solution with the priciples above ask your self can this be done simpler and if the answer is yes simplfiy it. Also include why the simpler appaoch works with acheving the desired functionatity. 
+## 7. **Simpler**
+
+* After forming a solution, ask: can this be done simpler?
+* If yes, simplify it.
+* Briefly explain why the simpler approach still achieves the required functionality.
 
 ---
 

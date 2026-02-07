@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../models/contributor.dart';
 import '../view_models/home_view_model.dart';
+import 'body_editor.dart' if (dart.library.html) 'body_editor_web.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -47,8 +48,12 @@ class _HomePageState extends State<HomePage> {
   final _companyCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _linkedinCtrl = TextEditingController();
-  final Map<String, TextEditingController> _initialTemplateCtrls = {};
-  final Map<String, TextEditingController> _followUpTemplateCtrls = {};
+  final Map<String, TextEditingController> _initialSubjectCtrls = {};
+  final Map<String, GlobalKey<BodyEditorState>> _initialBodyKeys = {};
+  final Map<String, TextEditingController> _initialFooterCtrls = {};
+  final Map<String, TextEditingController> _followUpSubjectCtrls = {};
+  final Map<String, GlobalKey<BodyEditorState>> _followUpBodyKeys = {};
+  final Map<String, TextEditingController> _followUpFooterCtrls = {};
 
   @override
   void dispose() {
@@ -58,12 +63,10 @@ class _HomePageState extends State<HomePage> {
     _companyCtrl.dispose();
     _emailCtrl.dispose();
     _linkedinCtrl.dispose();
-    for (final c in _initialTemplateCtrls.values) {
-      c.dispose();
-    }
-    for (final c in _followUpTemplateCtrls.values) {
-      c.dispose();
-    }
+    for (final c in _initialSubjectCtrls.values) { c.dispose(); }
+    for (final c in _initialFooterCtrls.values) { c.dispose(); }
+    for (final c in _followUpSubjectCtrls.values) { c.dispose(); }
+    for (final c in _followUpFooterCtrls.values) { c.dispose(); }
     _pageController.dispose();
     super.dispose();
   }
@@ -316,7 +319,7 @@ class _HomePageState extends State<HomePage> {
                   _cell(c.email),
                   _cell(c.linkedinUrl),
                   _outboundEmailCell(c, vm),
-                  _statusCell(c, vm),
+                  _cell(c.status.isEmpty ? '—' : c.status),
                   GestureDetector(
                     onTap: () async {
                       final confirmed = await showDialog<bool>(
@@ -458,17 +461,27 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildEmailTemplates(HomeViewModel vm, String category) {
-    // Lazily create controllers and sync from VM once per category
-    _initialTemplateCtrls.putIfAbsent(category, () => TextEditingController());
-    _followUpTemplateCtrls.putIfAbsent(category, () => TextEditingController());
+    const defaultFooter = 'Alex Pozo\nChief of Staff\nThe Electrification Index';
+    _initialSubjectCtrls.putIfAbsent(category, () => TextEditingController());
+    _initialBodyKeys.putIfAbsent(category, () => GlobalKey<BodyEditorState>());
+    _initialFooterCtrls.putIfAbsent(category, () => TextEditingController(text: defaultFooter));
+    _followUpSubjectCtrls.putIfAbsent(category, () => TextEditingController());
+    _followUpBodyKeys.putIfAbsent(category, () => GlobalKey<BodyEditorState>());
+    _followUpFooterCtrls.putIfAbsent(category, () => TextEditingController(text: defaultFooter));
     if (!_templatesSynced.contains(category)) {
-      final initial = vm.initialTemplate(category);
-      final followUp = vm.followUpTemplate(category);
-      if (initial.isNotEmpty || followUp.isNotEmpty) {
-        _initialTemplateCtrls[category]!.text = initial;
-        _followUpTemplateCtrls[category]!.text = followUp;
-        _initialLocked[category] = initial.isNotEmpty;
-        _followUpLocked[category] = followUp.isNotEmpty;
+      final hasInitial = vm.initialSubject(category).isNotEmpty || vm.initialBody(category).isNotEmpty;
+      final hasFollowUp = vm.followUpSubject(category).isNotEmpty || vm.followUpBody(category).isNotEmpty;
+      if (hasInitial || hasFollowUp) {
+        _initialSubjectCtrls[category]!.text = vm.initialSubject(category);
+        if (vm.initialFooter(category).isNotEmpty) {
+          _initialFooterCtrls[category]!.text = vm.initialFooter(category);
+        }
+        _followUpSubjectCtrls[category]!.text = vm.followUpSubject(category);
+        if (vm.followUpFooter(category).isNotEmpty) {
+          _followUpFooterCtrls[category]!.text = vm.followUpFooter(category);
+        }
+        _initialLocked[category] = hasInitial;
+        _followUpLocked[category] = hasFollowUp;
         _templatesSynced.add(category);
       }
     }
@@ -492,10 +505,24 @@ class _HomePageState extends State<HomePage> {
           category: category,
           title: 'Initial Email',
           type: 'initial',
-          controller: _initialTemplateCtrls[category]!,
+          subjectCtrl: _initialSubjectCtrls[category]!,
+          bodyKey: _initialBodyKeys[category]!,
+          bodyInitialHtml: vm.initialBody(category),
+          footerCtrl: _initialFooterCtrls[category]!,
           locked: _initialLocked[category] ?? false,
-          onToggleLock: () => setState(() =>
-              _initialLocked[category] = !(_initialLocked[category] ?? false)),
+          onToggleLock: () {
+            if (!(_initialLocked[category] ?? false)) {
+              vm.saveTemplate(
+                category,
+                'initial',
+                _initialSubjectCtrls[category]!.text.trim(),
+                _initialBodyKeys[category]!.currentState?.html ?? '',
+                _initialFooterCtrls[category]!.text.trim(),
+              );
+            }
+            setState(() =>
+                _initialLocked[category] = !(_initialLocked[category] ?? false));
+          },
         ),
         const SizedBox(height: 8),
         _buildTemplateCard(
@@ -503,10 +530,24 @@ class _HomePageState extends State<HomePage> {
           category: category,
           title: 'Follow-Up Email',
           type: 'followUp',
-          controller: _followUpTemplateCtrls[category]!,
+          subjectCtrl: _followUpSubjectCtrls[category]!,
+          bodyKey: _followUpBodyKeys[category]!,
+          bodyInitialHtml: vm.followUpBody(category),
+          footerCtrl: _followUpFooterCtrls[category]!,
           locked: _followUpLocked[category] ?? false,
-          onToggleLock: () => setState(() =>
-              _followUpLocked[category] = !(_followUpLocked[category] ?? false)),
+          onToggleLock: () {
+            if (!(_followUpLocked[category] ?? false)) {
+              vm.saveTemplate(
+                category,
+                'followUp',
+                _followUpSubjectCtrls[category]!.text.trim(),
+                _followUpBodyKeys[category]!.currentState?.html ?? '',
+                _followUpFooterCtrls[category]!.text.trim(),
+              );
+            }
+            setState(() =>
+                _followUpLocked[category] = !(_followUpLocked[category] ?? false));
+          },
         ),
         const SizedBox(height: 16),
         Row(
@@ -514,13 +555,6 @@ class _HomePageState extends State<HomePage> {
             _sendButton(vm, category, 'Send Initial Emails', 'initial'),
             const SizedBox(width: 12),
             _sendButton(vm, category, 'Send Follow-Up Emails', 'followUp'),
-            if (vm.sending) ...[
-              const SizedBox(width: 12),
-              const SizedBox(
-                width: 16, height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ],
             if (vm.sendResult.isNotEmpty && !vm.sending) ...[
               const SizedBox(width: 12),
               Text(
@@ -530,6 +564,7 @@ class _HomePageState extends State<HomePage> {
             ],
           ],
         ),
+        _buildSendDashboard(vm),
         const SizedBox(height: 12),
       ],
     );
@@ -540,7 +575,10 @@ class _HomePageState extends State<HomePage> {
     required String category,
     required String title,
     required String type,
-    required TextEditingController controller,
+    required TextEditingController subjectCtrl,
+    required GlobalKey<BodyEditorState> bodyKey,
+    required String bodyInitialHtml,
+    required TextEditingController footerCtrl,
     required bool locked,
     required VoidCallback onToggleLock,
   }) {
@@ -582,39 +620,26 @@ class _HomePageState extends State<HomePage> {
             Divider(height: 1, color: Colors.grey.shade300),
             Padding(
               padding: const EdgeInsets.all(12),
-              child: TextField(
-                controller: controller,
-                maxLines: 6,
-                decoration: InputDecoration(
-                  hintText: 'Paste your template here...',
-                  hintStyle: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: Colors.grey.shade400,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _templateLabel('Subject'),
+                  const SizedBox(height: 4),
+                  _templateField(subjectCtrl, 'Email subject line...'),
+                  const SizedBox(height: 12),
+                  _templateLabel('Body'),
+                  const SizedBox(height: 4),
+                  BodyEditor(
+                    key: bodyKey,
+                    initialHtml: bodyInitialHtml,
+                    hint: 'Paste from Google Docs to keep formatting...',
+                    minHeight: 200,
                   ),
-                  isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(
-                      color: const Color(0xFFF2A900).withValues(alpha: 0.3),
-                      width: 2,
-                    ),
-                  ),
-                ),
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.black87,
-                ),
+                  const SizedBox(height: 12),
+                  _templateLabel('Footer'),
+                  const SizedBox(height: 4),
+                  _templateField(footerCtrl, 'Signature...', maxLines: 3),
+                ],
               ),
             ),
             Padding(
@@ -623,7 +648,13 @@ class _HomePageState extends State<HomePage> {
                 alignment: Alignment.centerRight,
                 child: GestureDetector(
                   onTap: () {
-                    vm.saveTemplate(category, type, controller.text.trim());
+                    vm.saveTemplate(
+                      category,
+                      type,
+                      subjectCtrl.text.trim(),
+                      bodyKey.currentState?.html ?? '',
+                      footerCtrl.text.trim(),
+                    );
                     setState(() {
                       if (type == 'initial') {
                         _initialLocked[category] = true;
@@ -653,6 +684,51 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _templateLabel(String text) {
+    return Text(
+      text,
+      style: GoogleFonts.inter(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: Colors.black54,
+        letterSpacing: 0.5,
+      ),
+    );
+  }
+
+  Widget _templateField(TextEditingController controller, String hint, {int maxLines = 1}) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade400),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(
+            color: const Color(0xFFF2A900).withValues(alpha: 0.3),
+            width: 2,
+          ),
+        ),
+      ),
+      style: GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
+        color: Colors.black87,
       ),
     );
   }
@@ -750,29 +826,153 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _statusCell(Contributor c, HomeViewModel vm) {
+
+  Widget _buildSendDashboard(HomeViewModel vm) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: c.status.isEmpty ? null : c.status,
-          hint: Text(
-            'Set status',
-            style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade400),
-          ),
-          isDense: true,
-          isExpanded: true,
-          style: GoogleFonts.inter(fontSize: 12, color: Colors.black87),
-          items: HomeViewModel.statusOptions.map((s) => DropdownMenuItem(
-            value: s,
-            child: Text(s, style: GoogleFonts.inter(fontSize: 12)),
-          )).toList(),
-          onChanged: (value) {
-            if (value != null) {
-              vm.setStatus(c, value);
-            }
-          },
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(8),
+          color: Colors.grey.shade50,
         ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Sent ${vm.overallSent} / ${vm.overallTotal}',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: vm.overallTotal > 0
+                    ? vm.overallSent / vm.overallTotal
+                    : 0,
+                minHeight: 6,
+                backgroundColor: Colors.grey.shade200,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFFF2A900)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...vm.accountStatuses.map((a) => _buildAccountRow(a)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountRow(Map<String, dynamic> account) {
+    final email = (account['email'] as String).replaceAll('@gmail.com', '');
+    final status = account['status'] as String;
+    final sent = account['sent'] as int;
+    final total = account['total'] as int;
+    final cooldownUntil = account['cooldownUntil'] as double;
+
+    Color statusColor;
+    String statusText;
+    switch (status) {
+      case 'sending':
+        statusColor = const Color(0xFFF2A900);
+        statusText = 'Sending';
+      case 'cooldown':
+        statusColor = Colors.blue;
+        statusText = 'Cooldown';
+      case 'break':
+        statusColor = Colors.orange;
+        statusText = '5-min Break';
+      case 'pending':
+        statusColor = Colors.grey;
+        statusText = 'Starting';
+      case 'idle':
+        statusColor = Colors.grey.shade400;
+        statusText = 'Idle';
+      case 'error':
+        statusColor = Colors.red;
+        statusText = 'Error';
+      case 'done':
+        statusColor = Colors.green;
+        statusText = 'Done';
+      default:
+        statusColor = Colors.grey;
+        statusText = status;
+    }
+
+    String countdown = '';
+    if ((status == 'cooldown' || status == 'break') && cooldownUntil > 0) {
+      final remaining =
+          (cooldownUntil - DateTime.now().millisecondsSinceEpoch / 1000)
+              .ceil();
+      if (remaining > 0) {
+        if (remaining >= 60) {
+          countdown =
+              '${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}';
+        } else {
+          countdown = '${remaining}s';
+        }
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 180,
+            child: Text(
+              email,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: Colors.black54,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Container(
+            width: 80,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              statusText,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 50,
+            child: Text(
+              countdown,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: Colors.black54,
+              ),
+            ),
+          ),
+          Text(
+            '$sent/$total',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: Colors.black87,
+            ),
+          ),
+        ],
       ),
     );
   }
