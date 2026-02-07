@@ -555,10 +555,38 @@ class _HomePageState extends State<HomePage> {
             _sendButton(vm, category, 'Send Initial Emails', 'initial'),
             const SizedBox(width: 12),
             _sendButton(vm, category, 'Send Follow-Up Emails', 'followUp'),
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: vm.checkingReplies ? null : () => vm.checkReplies(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  vm.checkingReplies ? 'Checking...' : 'Check Replies',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: vm.checkingReplies
+                        ? Colors.grey.shade400
+                        : Colors.black.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+            ),
             if (vm.sendResult.isNotEmpty && !vm.sending) ...[
               const SizedBox(width: 12),
               Text(
                 vm.sendResult,
+                style: GoogleFonts.inter(fontSize: 12, color: Colors.black54),
+              ),
+            ],
+            if (vm.checkResult.isNotEmpty && !vm.checkingReplies) ...[
+              const SizedBox(width: 12),
+              Text(
+                vm.checkResult,
                 style: GoogleFonts.inter(fontSize: 12, color: Colors.black54),
               ),
             ],

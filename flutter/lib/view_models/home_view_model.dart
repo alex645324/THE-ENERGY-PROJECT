@@ -10,6 +10,8 @@ class HomeViewModel extends ChangeNotifier {
   bool _loading = false;
   bool _sending = false;
   String _sendResult = '';
+  bool _checkingReplies = false;
+  String _checkResult = '';
   String _jobId = '';
   List<Map<String, dynamic>> _accountStatuses = [];
   int _overallSent = 0;
@@ -47,6 +49,8 @@ class HomeViewModel extends ChangeNotifier {
   Map<String, List<Contributor>> get contributorsByCategory =>
       _contributorsByCategory;
   String get searchQuery => _searchQuery;
+  bool get checkingReplies => _checkingReplies;
+  String get checkResult => _checkResult;
 
   String initialSubject(String cat) => _initialSubjects[cat] ?? '';
   String initialBody(String cat) => _initialBodies[cat] ?? '';
@@ -251,6 +255,29 @@ class HomeViewModel extends ChangeNotifier {
       _sending = false;
       notifyListeners();
     }
+  }
+
+  Future<void> checkReplies() async {
+    _checkingReplies = true;
+    _checkResult = '';
+    notifyListeners();
+
+    try {
+      final response = await http.post(
+        Uri.parse('http://localhost:5001/check-replies'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final found = data['found'] as int? ?? 0;
+      _checkResult = found > 0 ? '$found new replies found' : 'No new replies';
+      await loadContributors();
+    } catch (e) {
+      _checkResult = 'Connection error: is the email server running?';
+    }
+
+    _checkingReplies = false;
+    notifyListeners();
   }
 
   void _startPolling() {

@@ -113,7 +113,7 @@ Below each category table is an "EMAIL TEMPLATES" section with two collapsible c
 
 Templates support `{{Name}}` placeholder — replaced with each recipient's `firstName` when sending.
 
-Below the template cards is a send dashboard (always visible) showing overall progress (sent/total) with a progress bar, and all 8 outbound accounts with live status badges (Sending, Cooldown, 5-min Break, Idle, Error, Done) and countdown timers. The Flutter app polls the email server every 2 seconds during active sends.
+Below the template cards is a row of action buttons: "Send Initial Emails", "Send Follow-Up Emails", and "Check Replies". The Check Replies button scans all 8 outbound inboxes for replies and updates matched contributors' status to "Responded". Below the buttons is a send dashboard (always visible) showing overall progress (sent/total) with a progress bar, and all 8 outbound accounts with live status badges (Sending, Cooldown, 5-min Break, Idle, Error, Done) and countdown timers. The Flutter app polls the email server every 2 seconds during active sends.
 
 ADVISORS and PROGRESS tabs are not yet implemented.
 
@@ -132,12 +132,14 @@ python3 automated-email-sender/mailer.py
 
 ### How It Works
 
-- Flask server on port 5001 with two endpoints:
+- Flask server on port 5001 with three endpoints:
   - `POST /send-emails` — accepts `{"category": "EPCs", "type": "initial"}` or `{"type": "followUp"}`, starts a send job, returns `{"jobId": "..."}` immediately
   - `GET /send-status/<job_id>` — returns per-account status, sent/total counts, and whether the job is done (used by Flutter polling)
+  - `POST /check-replies` — checks all 8 outbound Gmail inboxes via IMAP for unseen replies, matches senders to contributors in Firebase, sets their status to "Responded", returns `{"found": N}`
 - Reads recipients and email templates (Subject/Body/Footer) from Firebase (`COLLECTION` in `mailer.py`)
 - **Send Initial**: targets recipients with empty status → sets status to "Initial Email Sent"
 - **Send Follow-Up**: targets recipients with "No Response" status → sets status to "Follow-Up Sent"
+- **Reply tracking**: "Check Replies" button triggers IMAP scan of all 8 inboxes. If a recipient's email matches an unseen reply sender, their status is set to "Responded" and all further automated emails are skipped (both in new jobs via status filter and in-flight jobs via `RESPONDED_EMAILS` in-memory set)
 - **Parallel sending**: splits recipients across all 8 outbound accounts using Python `threading.Thread`, one thread per account. Each account follows its own anti-spam rules independently
 - `{{Name}}` in subject and body is replaced with each recipient's `firstName`
 - Body is sent as HTML (from the rich text editor). Footer is converted from plain text to HTML and appended with `<br><br>`
