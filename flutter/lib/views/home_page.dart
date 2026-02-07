@@ -15,16 +15,30 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   static const _tabLabels = ['CONTRIBUTORS', 'ADVISORS', 'PROGRESS'];
   static const _collapsedRowCount = 10;
-  static const _columnWidths = <int, TableColumnWidth>{
-    0: FlexColumnWidth(1.2),
-    1: FlexColumnWidth(1.5),
-    2: FlexColumnWidth(1.2),
-    3: FlexColumnWidth(1.5),
-    4: FlexColumnWidth(1.5),
-    5: FlexColumnWidth(1.5),
-    6: FlexColumnWidth(1.2),
-    7: FixedColumnWidth(40),
-  };
+
+  Map<int, TableColumnWidth> _columnWidths(bool showLinkedIn) {
+    if (showLinkedIn) {
+      return const {
+        0: FlexColumnWidth(1.2),
+        1: FlexColumnWidth(1.5),
+        2: FlexColumnWidth(1.2),
+        3: FlexColumnWidth(1.5),
+        4: FlexColumnWidth(1.5),
+        5: FlexColumnWidth(1.5),
+        6: FlexColumnWidth(1.2),
+        7: FixedColumnWidth(40),
+      };
+    }
+    return const {
+      0: FlexColumnWidth(1.2),
+      1: FlexColumnWidth(1.5),
+      2: FlexColumnWidth(1.2),
+      3: FlexColumnWidth(1.5),
+      4: FlexColumnWidth(1.5),
+      5: FlexColumnWidth(1.2),
+      6: FixedColumnWidth(40),
+    };
+  }
 
   final Set<String> _expandedCategories = {};
   final PageController _pageController = PageController();
@@ -79,16 +93,7 @@ class _HomePageState extends State<HomePage> {
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 40),
-            Text(
-              'THE ELECTRIFICATION INDEX OS',
-              style: GoogleFonts.inter(
-                fontSize: 30,
-                fontWeight: FontWeight.w400,
-                color: Colors.black.withValues(alpha: 0.55),
-              ),
-            ),
-            const SizedBox(height: 60),
+            const SizedBox(height: 24),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 80),
               child: Row(
@@ -283,41 +288,82 @@ class _HomePageState extends State<HomePage> {
         Table(
           border: TableBorder.all(color: Colors.grey.shade300, width: 1),
           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-          columnWidths: _columnWidths,
+          columnWidths: _columnWidths(context.read<HomeViewModel>().showLinkedIn),
           children: [
             TableRow(
               decoration: BoxDecoration(color: Colors.grey.shade100),
               children: [
                 ...HomeViewModel.contributorHeaders
-                    .map((h) => Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          child: Text(
-                            h,
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                              letterSpacing: 0.5,
+                    .where((h) => h != 'LINKEDIN' || context.read<HomeViewModel>().showLinkedIn)
+                    .map((h) {
+                      if (h == 'LINKEDIN') {
+                        return GestureDetector(
+                          onTap: () => context.read<HomeViewModel>().toggleLinkedIn(),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            child: Row(
+                              children: [
+                                Text(h, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87, letterSpacing: 0.5)),
+                                const SizedBox(width: 4),
+                                Icon(Icons.chevron_left, size: 14, color: Colors.grey.shade400),
+                              ],
                             ),
                           ),
-                        )),
+                        );
+                      }
+                      if (h == 'EMAIL' && !context.read<HomeViewModel>().showLinkedIn) {
+                        return GestureDetector(
+                          onTap: () => context.read<HomeViewModel>().toggleLinkedIn(),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            child: Row(
+                              children: [
+                                Text(h, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87, letterSpacing: 0.5)),
+                                const SizedBox(width: 4),
+                                Icon(Icons.chevron_right, size: 14, color: Colors.grey.shade400),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        child: Text(h, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87, letterSpacing: 0.5)),
+                      );
+                    }),
                 const SizedBox.shrink(),
               ],
             ),
             ...visibleContributors.map((c) {
               final vm = context.read<HomeViewModel>();
               final highlighted = vm.isMatch(c);
+              Color? rowColor;
+              if (highlighted) {
+                rowColor = const Color(0xFFFFF9C4);
+              } else {
+                switch (c.status) {
+                  case 'Initial Email Sent':
+                    rowColor = const Color(0xFFE3F2FD); // light blue
+                  case 'No Response':
+                    rowColor = const Color(0xFFFFF3E0); // light orange
+                  case 'Follow-Up Sent':
+                    rowColor = const Color(0xFFFFF9C4); // light yellow
+                  case 'Responded':
+                    rowColor = const Color(0xFFE8F5E9); // light green
+                  case 'No Response After Follow-Up':
+                    rowColor = const Color(0xFFFFCDD2); // light red
+                }
+              }
               return TableRow(
-                decoration: highlighted
-                    ? const BoxDecoration(color: Color(0xFFFFF9C4))
+                decoration: rowColor != null
+                    ? BoxDecoration(color: rowColor)
                     : null,
                 children: [
                   _cell(c.fullName),
                   _cell(c.title),
                   _cell(c.company),
                   _cell(c.email),
-                  _cell(c.linkedinUrl),
+                  if (vm.showLinkedIn) _cell(c.linkedinUrl),
                   _outboundEmailCell(c, vm),
                   _cell(c.status.isEmpty ? '—' : c.status),
                   GestureDetector(
@@ -403,7 +449,7 @@ class _HomePageState extends State<HomePage> {
                 BorderSide(color: Colors.grey.shade300, width: 1),
           ),
           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-          columnWidths: _columnWidths,
+          columnWidths: _columnWidths(context.read<HomeViewModel>().showLinkedIn),
           children: [
             TableRow(
               children: [
@@ -418,8 +464,8 @@ class _HomePageState extends State<HomePage> {
                 _inputCell(_titleCtrl, 'Title'),
                 _inputCell(_companyCtrl, 'Company'),
                 _inputCell(_emailCtrl, 'Email'),
-                _inputCell(_linkedinCtrl, 'LinkedIn URL'),
-                const SizedBox.shrink(),
+                if (context.read<HomeViewModel>().showLinkedIn)
+                  _inputCell(_linkedinCtrl, 'LinkedIn URL'),
                 const SizedBox.shrink(),
                 GestureDetector(
                   onTap: () => _handleAdd(
@@ -557,7 +603,7 @@ class _HomePageState extends State<HomePage> {
             _sendButton(vm, category, 'Send Follow-Up Emails', 'followUp'),
             const SizedBox(width: 12),
             GestureDetector(
-              onTap: vm.checkingReplies ? null : () => vm.checkReplies(),
+              onTap: vm.checkingReplies ? null : () => vm.checkReplies(category),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
@@ -592,9 +638,71 @@ class _HomePageState extends State<HomePage> {
             ],
           ],
         ),
+        _buildRespondedSection(vm, category),
         _buildSendDashboard(vm),
         const SizedBox(height: 12),
       ],
+    );
+  }
+
+  Widget _buildRespondedSection(HomeViewModel vm, String category) {
+    final responded = (vm.contributorsByCategory[category] ?? [])
+        .where((c) => c.status == 'Responded')
+        .toList();
+    if (responded.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFA5D6A7)),
+          borderRadius: BorderRadius.circular(8),
+          color: const Color(0xFFE8F5E9),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'RESPONDED (${responded.length})',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...responded.map((c) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 180,
+                    child: Text(
+                      c.fullName,
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.black87),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 220,
+                    child: Text(
+                      c.email,
+                      style: GoogleFonts.inter(fontSize: 11, color: Colors.black54),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    'via ${c.outboundEmail.replaceAll('@gmail.com', '')}',
+                    style: GoogleFonts.inter(fontSize: 11, color: Colors.black45),
+                  ),
+                ],
+              ),
+            )),
+          ],
+        ),
+      ),
     );
   }
 

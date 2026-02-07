@@ -94,7 +94,7 @@ void main() async {
       'followUpEmail': '',
     });
 
-    final contributors = generateContributors(category, 30);
+    final contributors = generateContributors(category, 10);
     for (final c in contributors) {
       await itemsRef.add(c);
     }
@@ -103,7 +103,7 @@ void main() async {
   runApp(
     MaterialApp(
       home: const Scaffold(
-        body: Center(child: Text('Seeded 90 fake contributors (30 per category). You can close this.')),
+        body: Center(child: Text('Seeded 30 fake contributors (10 per category). You can close this.')),
       ),
     ),
   );

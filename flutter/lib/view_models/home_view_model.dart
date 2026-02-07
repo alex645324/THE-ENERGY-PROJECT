@@ -19,7 +19,9 @@ class HomeViewModel extends ChangeNotifier {
   Timer? _pollTimer;
   Timer? _countdownTimer;
   Map<String, List<Contributor>> _contributorsByCategory = {};
+  final List<StreamSubscription<QuerySnapshot<Map<String, dynamic>>>> _subscriptions = [];
   String _searchQuery = '';
+  bool _showLinkedIn = false;
   final Map<String, String> _initialSubjects = {};
   final Map<String, String> _initialBodies = {};
   final Map<String, String> _initialFooters = {};
@@ -51,6 +53,7 @@ class HomeViewModel extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   bool get checkingReplies => _checkingReplies;
   String get checkResult => _checkResult;
+  bool get showLinkedIn => _showLinkedIn;
 
   String initialSubject(String cat) => _initialSubjects[cat] ?? '';
   String initialBody(String cat) => _initialBodies[cat] ?? '';
@@ -86,12 +89,26 @@ class HomeViewModel extends ChangeNotifier {
       _firestore.collection(_collectionName).doc(category);
 
   HomeViewModel() {
-    loadContributors();
+    _listenContributors();
     loadTemplates();
+  }
+
+  @override
+  void dispose() {
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
+    _stopPolling();
+    super.dispose();
   }
 
   void setTab(int index) {
     _selectedTab = index;
+    notifyListeners();
+  }
+
+  void toggleLinkedIn() {
+    _showLinkedIn = !_showLinkedIn;
     notifyListeners();
   }
 
@@ -153,39 +170,43 @@ class HomeViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadContributors() async {
+  void _listenContributors() {
     _loading = true;
     notifyListeners();
 
-    final Map<String, List<Contributor>> grouped = {};
-
+    int ready = 0;
     for (final category in _categories) {
-      final snapshot = await _items(category).get();
+      final sub = _items(category).snapshots().listen((snapshot) {
+        final list = snapshot.docs.map((doc) {
+          final d = doc.data();
+          return Contributor(
+            docId: doc.id,
+            firstName: d['firstName'] as String? ?? '',
+            lastName: d['lastName'] as String? ?? '',
+            title: d['title'] as String? ?? '',
+            company: d['company'] as String? ?? '',
+            email: d['email'] as String? ?? '',
+            linkedinUrl: d['linkedinUrl'] as String? ?? '',
+            category: category,
+            outboundEmail: d['outboundEmail'] as String? ?? '',
+            status: d['status'] as String? ?? '',
+          );
+        }).toList();
 
-      final list = snapshot.docs.map((doc) {
-        final d = doc.data();
-        return Contributor(
-          docId: doc.id,
-          firstName: d['firstName'] as String? ?? '',
-          lastName: d['lastName'] as String? ?? '',
-          title: d['title'] as String? ?? '',
-          company: d['company'] as String? ?? '',
-          email: d['email'] as String? ?? '',
-          linkedinUrl: d['linkedinUrl'] as String? ?? '',
-          category: category,
-          outboundEmail: d['outboundEmail'] as String? ?? '',
-          status: d['status'] as String? ?? '',
-        );
-      }).toList();
+        if (list.isNotEmpty) {
+          _contributorsByCategory[category] = list;
+        } else {
+          _contributorsByCategory.remove(category);
+        }
 
-      if (list.isNotEmpty) {
-        grouped[category] = list;
-      }
+        ready++;
+        if (ready >= _categories.length) {
+          _loading = false;
+        }
+        notifyListeners();
+      });
+      _subscriptions.add(sub);
     }
-
-    _contributorsByCategory = grouped;
-    _loading = false;
-    notifyListeners();
   }
 
   Future<void> loadTemplates() async {
@@ -257,7 +278,7 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> checkReplies() async {
+  Future<void> checkReplies(String category) async {
     _checkingReplies = true;
     _checkResult = '';
     notifyListeners();
@@ -266,12 +287,12 @@ class HomeViewModel extends ChangeNotifier {
       final response = await http.post(
         Uri.parse('http://localhost:5001/check-replies'),
         headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'category': category}),
       );
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final found = data['found'] as int? ?? 0;
       _checkResult = found > 0 ? '$found new replies found' : 'No new replies';
-      await loadContributors();
     } catch (e) {
       _checkResult = 'Connection error: is the email server running?';
     }
@@ -332,7 +353,6 @@ class HomeViewModel extends ChangeNotifier {
         _stopPolling();
         _sendResult = 'Sent $_overallSent/$_overallTotal emails';
         _sending = false;
-        await loadContributors();
       }
 
       notifyListeners();
