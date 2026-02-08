@@ -13,6 +13,7 @@ class HomeViewModel extends ChangeNotifier {
   bool _checkingReplies = false;
   String _checkResult = '';
   String _jobId = '';
+  bool _paused = false;
   List<Map<String, dynamic>> _accountStatuses = [];
   int _overallSent = 0;
   int _overallTotal = 0;
@@ -46,6 +47,7 @@ class HomeViewModel extends ChangeNotifier {
             })
         .toList();
   }
+  bool get paused => _paused;
   int get overallSent => _overallSent;
   int get overallTotal => _overallTotal;
   Map<String, List<Contributor>> get contributorsByCategory =>
@@ -301,6 +303,33 @@ class HomeViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> pauseJob() async {
+    if (_jobId.isEmpty) return;
+    try {
+      await http.post(Uri.parse('http://localhost:5001/pause-job/$_jobId'));
+      _paused = true;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> resumeJob() async {
+    if (_jobId.isEmpty) return;
+    try {
+      await http.post(Uri.parse('http://localhost:5001/resume-job/$_jobId'));
+      _paused = false;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> stopJob() async {
+    if (_jobId.isEmpty) return;
+    try {
+      await http.post(Uri.parse('http://localhost:5001/stop-job/$_jobId'));
+      _paused = false;
+      notifyListeners();
+    } catch (_) {}
+  }
+
   void _startPolling() {
     _pollTimer = Timer.periodic(
       const Duration(seconds: 2),
@@ -325,6 +354,7 @@ class HomeViewModel extends ChangeNotifier {
         _stopPolling();
         _sendResult = 'Job lost — server may have restarted';
         _sending = false;
+        _paused = false;
         notifyListeners();
         return;
       }
@@ -351,8 +381,14 @@ class HomeViewModel extends ChangeNotifier {
 
       if (data['done'] == true) {
         _stopPolling();
-        _sendResult = 'Sent $_overallSent/$_overallTotal emails';
+        final state = data['state'] as String? ?? 'running';
+        if (state == 'stopped') {
+          _sendResult = 'Stopped — sent $_overallSent/$_overallTotal emails';
+        } else {
+          _sendResult = 'Sent $_overallSent/$_overallTotal emails';
+        }
         _sending = false;
+        _paused = false;
       }
 
       notifyListeners();

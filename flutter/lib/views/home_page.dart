@@ -151,7 +151,7 @@ class _HomePageState extends State<HomePage> {
                                 crossAxisAlignment:
                                     CrossAxisAlignment.start,
                                 children: [
-                                  _buildSearchBar(vm),
+                                  _buildSearchBar(vm, category),
                                   const SizedBox(height: 24),
                                   _buildCategorySection(
                                     category,
@@ -171,27 +171,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildSearchBar(HomeViewModel vm) {
+  Widget _buildSearchBar(HomeViewModel vm, String category) {
     return Row(
       children: [
         Expanded(
           child: TextField(
-            onChanged: (query) {
-              vm.setSearchQuery(query);
-              if (query.isNotEmpty) {
-                final categories =
-                    vm.contributorsByCategory.keys.toList();
-                for (var i = 0; i < categories.length; i++) {
-                  final hasMatch = vm
-                      .contributorsByCategory[categories[i]]!
-                      .any((c) => vm.isMatch(c));
-                  if (hasMatch) {
-                    _goToPage(i);
-                    break;
-                  }
-                }
-              }
-            },
+            onChanged: (query) => vm.setSearchQuery(query),
             decoration: InputDecoration(
               hintText: 'Search by name...',
               hintStyle: GoogleFonts.inter(
@@ -225,7 +210,7 @@ class _HomePageState extends State<HomePage> {
         if (vm.searchQuery.isNotEmpty) ...[
           const SizedBox(width: 12),
           Text(
-            '${vm.contributorsByCategory.values.expand((list) => list).where((c) => vm.isMatch(c)).length} matches',
+            '${(vm.contributorsByCategory[category] ?? []).where((c) => vm.isMatch(c)).length} matches',
             style: GoogleFonts.inter(
               fontSize: 13,
               fontWeight: FontWeight.w500,
@@ -251,14 +236,37 @@ class _HomePageState extends State<HomePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              '$category (${contributors.length})',
-              style: GoogleFonts.inter(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-                letterSpacing: 0.5,
-              ),
+            Row(
+              children: [
+                Text(
+                  '$category (${contributors.length})',
+                  style: GoogleFonts.inter(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                GestureDetector(
+                  onTap: () => _checkDuplicates(context.read<HomeViewModel>(), category, contributors),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'Check Duplicates',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
             if (context.read<HomeViewModel>().contributorsByCategory.length > 1)
               Row(
@@ -339,7 +347,7 @@ class _HomePageState extends State<HomePage> {
               final highlighted = vm.isMatch(c);
               Color? rowColor;
               if (highlighted) {
-                rowColor = const Color(0xFFFFF9C4);
+                rowColor = const Color(0xFFE1BEE7);
               } else {
                 switch (c.status) {
                   case 'Initial Email Sent':
@@ -368,65 +376,7 @@ class _HomePageState extends State<HomePage> {
                   _cell(c.status.isEmpty ? '—' : c.status),
                   GestureDetector(
                     onTap: () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          backgroundColor: Colors.white,
-                          surfaceTintColor: Colors.transparent,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          title: Text(
-                            'Delete contributor?',
-                            style: GoogleFonts.inter(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black.withValues(alpha: 0.7),
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          content: Text(
-                            'Remove ${c.fullName}?',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
-                              color: Colors.black.withValues(alpha: 0.55),
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.grey.shade400,
-                              ),
-                              onPressed: () => Navigator.pop(ctx, false),
-                              child: Text(
-                                'Cancel',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade400,
-                                ),
-                              ),
-                            ),
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFFF2A900),
-                              ),
-                              onPressed: () => Navigator.pop(ctx, true),
-                              child: Text(
-                                'Delete',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.black.withValues(alpha: 0.7),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (confirmed == true) {
+                      if (await _confirmAction('Delete contributor?', 'Remove ${c.fullName}?')) {
                         vm.deleteContributor(c);
                       }
                     },
@@ -622,6 +572,58 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
+            if (vm.sending) ...[
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () async {
+                  if (vm.paused) {
+                    vm.resumeJob();
+                  } else {
+                    if (await _confirmAction('Pause job?', 'Pause sending emails? You can resume later.')) {
+                      vm.pauseJob();
+                    }
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    vm.paused ? 'Resume' : 'Pause',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () async {
+                  if (await _confirmAction('Stop job?', 'Stop sending emails? This cannot be undone.')) {
+                    vm.stopJob();
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.red.shade200),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'Stop',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.red.shade400,
+                    ),
+                  ),
+                ),
+              ),
+            ],
             if (vm.sendResult.isNotEmpty && !vm.sending) ...[
               const SizedBox(width: 12),
               Text(
@@ -1033,6 +1035,12 @@ class _HomePageState extends State<HomePage> {
       case 'error':
         statusColor = Colors.red;
         statusText = 'Error';
+      case 'paused':
+        statusColor = Colors.purple;
+        statusText = 'Paused';
+      case 'stopped':
+        statusColor = Colors.red.shade300;
+        statusText = 'Stopped';
       case 'done':
         statusColor = Colors.green;
         statusText = 'Done';
@@ -1115,7 +1123,11 @@ class _HomePageState extends State<HomePage> {
 
   Widget _sendButton(HomeViewModel vm, String category, String label, String type) {
     return GestureDetector(
-      onTap: vm.sending ? null : () => vm.sendEmails(category, type),
+      onTap: vm.sending ? null : () async {
+        if (await _confirmAction('$label?', 'Send ${type == 'initial' ? 'initial' : 'follow-up'} emails to all eligible $category recipients?')) {
+          vm.sendEmails(category, type);
+        }
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
@@ -1131,6 +1143,176 @@ class _HomePageState extends State<HomePage> {
                 ? Colors.grey.shade400
                 : Colors.black.withValues(alpha: 0.7),
           ),
+        ),
+      ),
+    );
+  }
+
+  Future<bool> _confirmAction(String title, String message) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: Colors.grey.shade300),
+        ),
+        title: Text(
+          title,
+          style: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.black.withValues(alpha: 0.7),
+            letterSpacing: 0.5,
+          ),
+        ),
+        content: Text(
+          message,
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w400,
+            color: Colors.black.withValues(alpha: 0.55),
+          ),
+        ),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.grey.shade400),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey.shade400)),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFF2A900)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Confirm', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.black.withValues(alpha: 0.7))),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  void _checkDuplicates(HomeViewModel vm, String category, List<Contributor> contributors) {
+    // Group by lowercase email
+    final groups = <String, List<Contributor>>{};
+    for (final c in contributors) {
+      if (c.email.isEmpty) continue;
+      final key = c.email.toLowerCase();
+      groups.putIfAbsent(key, () => []).add(c);
+    }
+    final duplicates = groups.entries.where((e) => e.value.length > 1).toList();
+
+    if (duplicates.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: Colors.grey.shade300),
+          ),
+          title: Text('No duplicates', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black.withValues(alpha: 0.7), letterSpacing: 0.5)),
+          content: Text('No duplicate emails found in $category.', style: GoogleFonts.inter(fontSize: 13, color: Colors.black.withValues(alpha: 0.55))),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('OK', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.black.withValues(alpha: 0.7))),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    // Track which contributor to keep per duplicate group
+    final selected = <String, Contributor>{};
+    for (final entry in duplicates) {
+      selected[entry.key] = entry.value.first;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: Colors.grey.shade300),
+          ),
+          title: Text(
+            'Duplicate emails found',
+            style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black.withValues(alpha: 0.7), letterSpacing: 0.5),
+          ),
+          content: SizedBox(
+            width: 500,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Select which record to keep for each duplicate email:',
+                    style: GoogleFonts.inter(fontSize: 13, color: Colors.black.withValues(alpha: 0.55)),
+                  ),
+                  const SizedBox(height: 12),
+                  for (final entry in duplicates) ...[
+                    Text(
+                      entry.key,
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 4),
+                    for (final c in entry.value)
+                      GestureDetector(
+                        onTap: () => setDialogState(() => selected[entry.key] = c),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Icon(
+                                selected[entry.key] == c ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                size: 16,
+                                color: selected[entry.key] == c ? const Color(0xFFF2A900) : Colors.grey.shade400,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '${c.fullName} — ${c.title.isNotEmpty ? c.title : "No title"}, ${c.company.isNotEmpty ? c.company : "No company"}',
+                                  style: GoogleFonts.inter(fontSize: 12, color: Colors.black87),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 10),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancel', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey.shade400)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                for (final entry in duplicates) {
+                  final keep = selected[entry.key]!;
+                  for (final c in entry.value) {
+                    if (c != keep) {
+                      vm.deleteContributor(c);
+                    }
+                  }
+                }
+              },
+              child: Text('Remove duplicates', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.black.withValues(alpha: 0.7))),
+            ),
+          ],
         ),
       ),
     );
