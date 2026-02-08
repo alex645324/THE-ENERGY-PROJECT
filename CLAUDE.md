@@ -86,7 +86,7 @@ Contributor data is stored in Firestore using subcollections. The collection nam
 
 **Production collection** (`contributors`): ~2,350 real records across 3 categories. NOT currently in use. No reads, writes, or emails are sent to this collection.
 
-**Test collection** (`contributors_test`): 2 dummy contributors per category seeded via `lib/seed.dart`. Test emails: `alieelpozo3@gmail.com`, `alieelswork@gmail.com`. This is the only collection the app and email sender interact with right now.
+**Test collection** (`contributors_test`): 10 dummy contributors per category (30 total) seeded via `lib/seed.dart` with fake emails (`@faketestemail.com`). This is the only collection the app and email sender interact with right now.
 
 Both collections share the same structure:
 
@@ -107,13 +107,21 @@ Each category document stores 6 template fields: `initialEmailSubject`, `initial
 
 ### Current State
 
-The app displays a 3-tab bar (CONTRIBUTORS, ADVISORS, PROGRESS). Default selected tab is ADVISORS (index 1). The CONTRIBUTORS tab reads contributor data from Firestore and displays it in stacked tables grouped by category (EPCs, OEMs, Utilities), showing Name, Title, Company, Email, Outbound Email, Status, and a narrow action column. The LinkedIn column is hidden by default and can be toggled visible via a chevron icon next to the Email header (`showLinkedIn` in `HomeViewModel`). The action column shows an `x` icon on data rows (deletes the contributor after a confirmation dialog) and a `+` icon on the input row (adds a new contributor). Rows are color-coded by status: Initial Email Sent (light blue), No Response (light orange), Follow-Up Sent (light yellow), Responded (light green), No Response After Follow-Up (light red).
+The app displays a 3-tab bar (CONTRIBUTORS, ADVISORS, PROGRESS). Default selected tab is ADVISORS (index 1). The CONTRIBUTORS tab uses a PageView to show one category at a time (EPCs, OEMs, Utilities) with left/right chevron navigation. Each page shows a contributor table with Name, Title, Company, Email, Outbound Email, Status, and a narrow action column. The LinkedIn column is hidden by default and can be toggled visible via a chevron icon next to the Email header (`showLinkedIn` in `HomeViewModel`). The action column shows an `x` icon on data rows (deletes the contributor after a confirmation dialog) and a `+` icon on the input row (adds a new contributor). Rows are color-coded by status: Initial Email Sent (light blue), No Response (light orange), Follow-Up Sent (light yellow), Responded (light green), No Response After Follow-Up (light red). Search-matched rows are highlighted in light purple (`0xFFE1BEE7`).
+
+Next to each category title is a "Check Duplicates" button that scans the current category for duplicate email addresses (case-insensitive). If duplicates are found, a dialog shows radio buttons per duplicate group to select which record to keep — unchosen records are deleted. If no duplicates, shows a "No duplicates found" message.
+
+Name search (top of each page) filters within the current category only and does not auto-switch to other categories. Match count is scoped to the current category.
 
 Below each category table is an "EMAIL TEMPLATES" section with two collapsible cards (Initial Email and Follow-Up Email). Each card has separate Subject (text field), Body (rich text editor), and Footer (text field) sections, a Save button, and a lock/collapse toggle. The lock icon auto-saves content when locking. The Body editor uses a `contenteditable` div on web (`body_editor_web.dart`) that preserves formatting pasted from Google Docs (bold, italics, links, line breaks). Non-web platforms use a plain TextField fallback (`body_editor.dart`). These are wired via conditional import: `import 'body_editor.dart' if (dart.library.html) 'body_editor_web.dart'`.
 
 Templates support `{{Name}}` placeholder — replaced with each recipient's `firstName` when sending.
 
-Below the template cards is a row of action buttons: "Send Initial Emails", "Send Follow-Up Emails", and "Check Replies". The Check Replies button can be clicked at any time and performs three actions in order: (1) scans all 8 outbound inboxes for replies and marks matched contributors as "Responded", (2) marks "Initial Email Sent" contributors with no reply as "No Response", (3) marks "Follow-Up Sent" contributors with no reply as "No Response After Follow-Up". Contributors who replied are always protected from being overwritten by the no-reply checks. Below the buttons is a send dashboard (always visible) showing overall progress (sent/total) with a progress bar, and all 8 outbound accounts with live status badges (Sending, Cooldown, 5-min Break, Idle, Error, Done) and countdown timers. The Flutter app polls the email server every 2 seconds during active sends.
+Below the template cards is a row of action buttons: "Send Initial Emails", "Send Follow-Up Emails", and "Check Replies". All send actions require a confirmation dialog before executing (same style as delete-user popup). The Check Replies button can be clicked at any time and performs three actions in order: (1) scans all 8 outbound inboxes for replies and marks matched contributors as "Responded", (2) marks "Initial Email Sent" contributors with no reply as "No Response", (3) marks "Follow-Up Sent" contributors with no reply as "No Response After Follow-Up". Contributors who replied are always protected from being overwritten by the no-reply checks.
+
+During active sends, Pause and Stop buttons appear. Pause requires confirmation and suspends all threads (resumable without confirmation). Stop requires confirmation and terminates the job permanently. The dashboard shows status badges including Paused (purple) and Stopped (red).
+
+Below the buttons is a Responded section showing contributors who replied (name, email, outbound account). Below that is a send dashboard (always visible) showing overall progress (sent/total) with a progress bar, and all 8 outbound accounts with live status badges (Sending, Cooldown, 5-min Break, Idle, Error, Paused, Stopped, Done) and countdown timers. The Flutter app polls the email server every 2 seconds during active sends.
 
 ADVISORS and PROGRESS tabs are not yet implemented.
 
@@ -132,9 +140,12 @@ python3 automated-email-sender/mailer.py
 
 ### How It Works
 
-- Flask server on port 5001 with three endpoints:
+- Flask server on port 5001 with six endpoints:
   - `POST /send-emails` — accepts `{"category": "EPCs", "type": "initial"}` or `{"type": "followUp"}`, starts a send job, returns `{"jobId": "..."}` immediately
-  - `GET /send-status/<job_id>` — returns per-account status, sent/total counts, and whether the job is done (used by Flutter polling)
+  - `GET /send-status/<job_id>` — returns per-account status, sent/total counts, job state, and whether the job is done (used by Flutter polling)
+  - `POST /pause-job/<job_id>` — pauses the job (threads sleep until resumed)
+  - `POST /resume-job/<job_id>` — resumes a paused job
+  - `POST /stop-job/<job_id>` — stops the job permanently (threads exit)
   - `POST /check-replies` — checks all 8 outbound Gmail inboxes via IMAP for unseen replies. Marks matched senders as "Responded", then marks "Initial Email Sent" with no reply as "No Response", then marks "Follow-Up Sent" with no reply as "No Response After Follow-Up". Returns `{"found": N}` (count of new replies)
 - Reads recipients and email templates (Subject/Body/Footer) from Firebase (`COLLECTION` in `mailer.py`)
 - **Send Initial**: targets recipients with empty status → sets status to "Initial Email Sent"
@@ -143,7 +154,7 @@ python3 automated-email-sender/mailer.py
 - **Reply tracking**: "Check Replies" triggers IMAP scan of all 8 inboxes. Marks matched senders as "Responded", then marks "Initial Email Sent" with no reply as "No Response", then marks "Follow-Up Sent" with no reply as "No Response After Follow-Up". "Responded" is a terminal status — no automated emails are ever sent to responded users (enforced by status filters in send logic and `RESPONDED_EMAILS` in-memory set for in-flight jobs)
 - **Parallel sending**: splits recipients across all 8 outbound accounts using Python `threading.Thread`, one thread per account. Each account follows its own anti-spam rules independently
 - `{{Name}}` in subject and body is replaced with each recipient's `firstName`
-- Body is sent as HTML (from the rich text editor). Footer is converted from plain text to HTML and appended with `<br><br>`
+- Emails are sent as `multipart/alternative` with both plain text and HTML parts (anti-spam best practice). Footer is converted from plain text to HTML and appended with `<br><br>`
 - Auto-assigns an outbound Gmail account to each recipient (round-robin, immutable once set)
 - Each recipient always receives emails from their assigned outbound account
 - Job state is stored in-memory (`JOBS` dict) — lost on server restart
@@ -160,6 +171,10 @@ Per-account (each of the 8 threads independently):
 - 5-minute cooldown every 10 emails
 - Stops immediately on SMTP 550 spam block detection
 - 15-second pause on other SMTP errors before continuing
+- `multipart/alternative` format (plain text + HTML) — single-part HTML is a spam signal
+- `List-Unsubscribe` mailto header on every email — Gmail checks for this
+- Per-email HTML content variation via `_vary_html()` — wraps body in a `<div>` with a unique `id` and inserts a unique HTML comment so no two emails have identical fingerprints
+- Debug prints: `[VARY]` logs unique uid per email, `[ANTI-SPAM]` logs format/header details per send
 
 ### Dependencies
 
