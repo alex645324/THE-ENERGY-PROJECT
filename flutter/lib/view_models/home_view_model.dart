@@ -27,6 +27,8 @@ class HomeViewModel extends ChangeNotifier {
   final Map<String, String> _initialBodies = {};
   final Map<String, String> _followUpSubjects = {};
   final Map<String, String> _followUpBodies = {};
+  final Map<String, String> _initialFooters = {};
+  final Map<String, String> _followUpFooters = {};
 
   int get selectedTab => _selectedTab;
   bool get loading => _loading;
@@ -59,6 +61,8 @@ class HomeViewModel extends ChangeNotifier {
   String initialBody(String cat) => _initialBodies[cat] ?? '';
   String followUpSubject(String cat) => _followUpSubjects[cat] ?? '';
   String followUpBody(String cat) => _followUpBodies[cat] ?? '';
+  String initialFooter(String cat) => _initialFooters[cat] ?? '';
+  String followUpFooter(String cat) => _followUpFooters[cat] ?? '';
 
   static const contributorHeaders = ['NAME', 'TITLE', 'COMPANY', 'EMAIL', 'LINKEDIN', 'OUTBOUND EMAIL', 'STATUS'];
 
@@ -78,7 +82,7 @@ class HomeViewModel extends ChangeNotifier {
   static const _categories = ['EPCs', 'OEMs', 'Utilities'];
 
   // Switch to 'contributors' for production
-  static const _collectionName = 'contributors_test';
+  static const _collectionName = 'contributors';
 
   CollectionReference<Map<String, dynamic>> _items(String category) =>
       _firestore.collection(_collectionName).doc(category).collection('items');
@@ -216,24 +220,29 @@ class HomeViewModel extends ChangeNotifier {
         _initialBodies[category] = d['initialEmailBody'] as String? ?? '';
         _followUpSubjects[category] = d['followUpEmailSubject'] as String? ?? '';
         _followUpBodies[category] = d['followUpEmailBody'] as String? ?? '';
+        _initialFooters[category] = d['initialEmailFooter'] as String? ?? '';
+        _followUpFooters[category] = d['followUpEmailFooter'] as String? ?? '';
       }
     }
     notifyListeners();
   }
 
-  Future<void> saveTemplate(String category, String type, String subject, String body) async {
+  Future<void> saveTemplate(String category, String type, String subject, String body, String footer) async {
     final prefix = type == 'initial' ? 'initialEmail' : 'followUpEmail';
     if (type == 'initial') {
       _initialSubjects[category] = subject;
       _initialBodies[category] = body;
+      _initialFooters[category] = footer;
     } else {
       _followUpSubjects[category] = subject;
       _followUpBodies[category] = body;
+      _followUpFooters[category] = footer;
     }
     notifyListeners();
     await _categoryDoc(category).set({
       '${prefix}Subject': subject,
       '${prefix}Body': body,
+      '${prefix}Footer': footer,
     }, SetOptions(merge: true));
   }
 

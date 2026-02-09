@@ -72,6 +72,8 @@ class _HomePageState extends State<HomePage> {
   final Map<String, GlobalKey<BodyEditorState>> _initialBodyKeys = {};
   final Map<String, TextEditingController> _followUpSubjectCtrls = {};
   final Map<String, GlobalKey<BodyEditorState>> _followUpBodyKeys = {};
+  final Map<String, TextEditingController> _initialFooterCtrls = {};
+  final Map<String, TextEditingController> _followUpFooterCtrls = {};
 
   @override
   void dispose() {
@@ -87,6 +89,8 @@ class _HomePageState extends State<HomePage> {
     _advEmailCtrl.dispose();
     for (final c in _initialSubjectCtrls.values) { c.dispose(); }
     for (final c in _followUpSubjectCtrls.values) { c.dispose(); }
+    for (final c in _initialFooterCtrls.values) { c.dispose(); }
+    for (final c in _followUpFooterCtrls.values) { c.dispose(); }
     _pageController.dispose();
     super.dispose();
   }
@@ -517,12 +521,16 @@ class _HomePageState extends State<HomePage> {
     _initialBodyKeys.putIfAbsent(category, () => GlobalKey<BodyEditorState>());
     _followUpSubjectCtrls.putIfAbsent(category, () => TextEditingController());
     _followUpBodyKeys.putIfAbsent(category, () => GlobalKey<BodyEditorState>());
+    _initialFooterCtrls.putIfAbsent(category, () => TextEditingController());
+    _followUpFooterCtrls.putIfAbsent(category, () => TextEditingController());
     if (!_templatesSynced.contains(category)) {
       final hasInitial = vm.initialSubject(category).isNotEmpty || vm.initialBody(category).isNotEmpty;
       final hasFollowUp = vm.followUpSubject(category).isNotEmpty || vm.followUpBody(category).isNotEmpty;
       if (hasInitial || hasFollowUp) {
         _initialSubjectCtrls[category]!.text = vm.initialSubject(category);
         _followUpSubjectCtrls[category]!.text = vm.followUpSubject(category);
+        _initialFooterCtrls[category]!.text = vm.initialFooter(category);
+        _followUpFooterCtrls[category]!.text = vm.followUpFooter(category);
         _initialLocked[category] = hasInitial;
         _followUpLocked[category] = hasFollowUp;
         _templatesSynced.add(category);
@@ -551,6 +559,7 @@ class _HomePageState extends State<HomePage> {
           subjectCtrl: _initialSubjectCtrls[category]!,
           bodyKey: _initialBodyKeys[category]!,
           bodyInitialHtml: vm.initialBody(category),
+          footerCtrl: _initialFooterCtrls[category]!,
           locked: _initialLocked[category] ?? false,
           onToggleLock: () {
             if (!(_initialLocked[category] ?? false)) {
@@ -559,6 +568,7 @@ class _HomePageState extends State<HomePage> {
                 'initial',
                 _initialSubjectCtrls[category]!.text.trim(),
                 _initialBodyKeys[category]!.currentState?.html ?? '',
+                _initialFooterCtrls[category]!.text.trim(),
               );
             }
             setState(() =>
@@ -574,6 +584,7 @@ class _HomePageState extends State<HomePage> {
           subjectCtrl: _followUpSubjectCtrls[category]!,
           bodyKey: _followUpBodyKeys[category]!,
           bodyInitialHtml: vm.followUpBody(category),
+          footerCtrl: _followUpFooterCtrls[category]!,
           locked: _followUpLocked[category] ?? false,
           onToggleLock: () {
             if (!(_followUpLocked[category] ?? false)) {
@@ -582,6 +593,7 @@ class _HomePageState extends State<HomePage> {
                 'followUp',
                 _followUpSubjectCtrls[category]!.text.trim(),
                 _followUpBodyKeys[category]!.currentState?.html ?? '',
+                _followUpFooterCtrls[category]!.text.trim(),
               );
             }
             setState(() =>
@@ -759,6 +771,7 @@ class _HomePageState extends State<HomePage> {
     required TextEditingController subjectCtrl,
     required GlobalKey<BodyEditorState> bodyKey,
     required String bodyInitialHtml,
+    required TextEditingController footerCtrl,
     required bool locked,
     required VoidCallback onToggleLock,
   }) {
@@ -815,6 +828,10 @@ class _HomePageState extends State<HomePage> {
                     hint: 'Paste from Google Docs to keep formatting...',
                     minHeight: 200,
                   ),
+                  const SizedBox(height: 12),
+                  _templateLabel('Footer'),
+                  const SizedBox(height: 4),
+                  _templateField(footerCtrl, 'Email footer text...', maxLines: 3),
                 ],
               ),
             ),
@@ -829,6 +846,7 @@ class _HomePageState extends State<HomePage> {
                       type,
                       subjectCtrl.text.trim(),
                       bodyKey.currentState?.html ?? '',
+                      footerCtrl.text.trim(),
                     );
                     setState(() {
                       if (type == 'initial') {
